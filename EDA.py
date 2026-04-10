@@ -10,8 +10,7 @@ sns.set_theme(style='whitegrid')
 print("All imports successful")
 
 # === CELL 2: Load Data ===
-df = pd.read_csv('diabetes.csv')
-
+df = pd.read_csv('Diabetes Predictor/diabetes.csv')
 print("Shape:", df.shape)
 print("\nFirst 5 rows:")
 df.head()
