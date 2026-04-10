@@ -5,47 +5,61 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 
-# Load dataset (assuming you still have df from Session 1)
-df = pd.read_csv('diabetes.csv')  
+# === CELL 2: Load & Replace Zeros with NaN ===
+df = pd.read_csv('diabetes.csv')
+
+# These columns cannot biologically be zero — treat as missing
+zero_cols = ['Glucose', 'BloodPressure', 'SkinThickness', 'Insulin', 'BMI']
+df[zero_cols] = df[zero_cols].replace(0, np.nan)
+
+print("Zeros replaced with NaN")
+print(df[zero_cols].isnull().sum())
+
+# === CELL 3: Train/Test Split ===
+# Split BEFORE any scaling — this is critical to prevent data leakage
 
 X = df.drop('Outcome', axis=1)
 y = df['Outcome']
 
-# ⚠️ IMPORTANT: Split FIRST to prevent data leakage
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y
+    X, y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y        # preserves the 65/35 class ratio in both splits
 )
 
-print(f"Train: {X_train.shape[0]} | Test: {X_test.shape[0]}")
-print(f"Class ratio (train): {y_train.value_counts(normalize=True).to_dict()}")
+print(f"Train: {X_train.shape}, Test: {X_test.shape}")
+print(f"\nClass balance in train:\n{y_train.value_counts(normalize=True).round(3)}")
+print(f"\nClass balance in test:\n{y_test.value_counts(normalize=True).round(3)}")
 
-# Columns where 0 = missing
-zero_as_missing_cols = ['Glucose', 'BloodPressure', 'SkinThickness', 'Insulin', 'BMI']
+# === CELL 4: Build the sklearn Pipeline ===
+# The Pipeline chains steps — each step's output feeds the next
+# Key rule: fit() only ever sees training data
 
-preprocessor = Pipeline(steps=[
-    # Replace 0s with median (sklearn handles missing_values=0 natively)
-    ('imputer', SimpleImputer(missing_values=0, strategy='median')),
-    # Scale all features to mean=0, std=1
-    ('scaler', StandardScaler())
+pipeline = Pipeline([
+    ('imputer', SimpleImputer(strategy='median')),  # fills NaN with median
+    ('scaler',  StandardScaler())                   # z-score normalisation
 ])
 
-# ✅ FIT only on training data
-X_train_processed = preprocessor.fit_transform(X_train)
+# fit_transform on train: learns median & μ/σ from training data, then applies
+X_train_processed = pipeline.fit_transform(X_train)
 
-# ✅ TRANSFORM test data using training statistics
-X_test_processed = preprocessor.transform(X_test)
+# transform on test: applies the SAME medians & μ/σ learned from train only
+X_test_processed  = pipeline.transform(X_test)
 
-# Convert back to DataFrame for easier debugging (optional but recommended)
-X_train_processed = pd.DataFrame(X_train_processed, columns=X.columns, index=X_train.index)
-X_test_processed  = pd.DataFrame(X_test_processed,  columns=X.columns, index=X_test.index)
+print("Pipeline fitted and applied")
+print(f"Processed train shape: {X_train_processed.shape}")
+print(f"Processed test shape:  {X_test_processed.shape}")
 
-print("✅ No missing values remaining?")
-print("Train:", X_train_processed.isnull().sum().sum() == 0)
-print("Test: ", X_test_processed.isnull().sum().sum() == 0)
+# === CELL 5: Verify Scaling ===
+# After StandardScaler, train data should have mean ≈ 0 and std ≈ 1
+# Test data will be close but not exact — that's expected and correct
 
-print("\n✅ Scaled? (Mean ≈ 0, Std ≈ 1)")
-print(X_train_processed.describe().round(2))
+train_df = pd.DataFrame(X_train_processed, columns=X.columns)
+test_df  = pd.DataFrame(X_test_processed,  columns=X.columns)
 
-print("\n✅ Class balance preserved?")
-print(y_train.value_counts(normalize=True).round(3))
-print(y_test.value_counts(normalize=True).round(3))
+print("=== Train set stats (should be ~0 mean, ~1 std) ===")
+print(train_df.describe().loc[['mean','std']].round(3))
+
+print("\n=== Test set stats (close but not exact — this is correct) ===")
+print(test_df.describe().loc[['mean','std']].round(3))
